@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <title> Min-Won-Chang-Goo </title>
+      <link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/themes/start/jquery-ui.css" type="text/css" rel="Stylesheet"/>
+      <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.3/jquery.min.js"></script>
+      <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.5/jquery-ui.min.js"></script>
+      <script src="/socket.io/socket.io.js"></script>
+
+      <script type ="text/javascript">
+
+      var socketio = io.connect();
+      var userC;
+
+      socketio.on("message_to_client",function(data) {
+         //Append an HR thematic break and the escaped HTML of the new message
+         document.getElementById("chatlog").appendChild(document.createElement("\p"));
+         document.getElementById("chatlog").appendChild(document.createTextNode(data['message']));
+      });
+
+      socketio.on("private_to_client",function(sender, msg){
+         var privateMsg = document.getElementById("chatlog").appendChild(document.createElement("\p"));
+         privateMsg.appendChild(document.createTextNode("Private(" + sender + "): " + msg));
+      });
+
+      
+      socketio.on("user_to_client", function(data) {
+         remove();
+         var curRoom = data.current_room;
+         var curUser = data.current_user;
+         var logUser = document.getElementsByClassName("loggedUser")[0];
+         for(var i in curUser){
+            if(curUser[i] == curRoom){
+               logUser.appendChild(document.createElement("\p"));
+               logUser.appendChild(document.createTextNode(i));
+               console.log("userToClient: " + i);
+            }
+         }
+      });
+      
+      
+
+      socketio.on("updaterooms", function(room, current_room, privateRoom) {
+         $('#chat_rooms').empty();
+         $.each(room, function(key, value) {
+            if(value == current_room){
+               $('#chat_rooms').append('<div>' + value + '/div');
+            }
+            else {
+               $('#chat_rooms').append('<div><a href="#" onclick="changeRoom(\' '+value+'\')">' + value + '</a></div>'); 
+            }
+         });
+      });
+
+      socketio.on("pw_to_client", function(room) {
+         socketio.emit("correct", room, prompt("What is the pw?"));
+      });
+
+      socketio.on("kicked", function(badUserKick){
+         var room = 'Lobby';
+         console.log("Kicked?" + badUserKick);
+         if (badUserKick == userC){
+            alert("You've been kicked");
+            socketio.emit("changeRoom", room);
+         }
+      });
+
+      socketio.on("banned", function(badUserBan){
+         var room = 'Lobby';
+         console.log("Banned?" + badUserBan); 
+         if (badUserBan == userC){
+            alert("You've been banned");
+            socketio.emit("changeRoom", room);
+         }         
+      });
+
+      function sendMessage(){
+         var msg = document.getElementById("message_input").value;
+         socketio.emit("message_to_server", {message:msg});
+      }
+
+      function sendPrivate(){
+         var msg = document.getElementById("private_input").value;
+         var to = document.getElementById("private_to").value;
+         socketio.emit("private_to_server", msg, to);
+      }
+
+
+      function sendId(){
+         var newId = document.getElementById("userId").value;
+         userC = newId;
+         socketio.emit("newUser", newId);
+         document.getElementById("user").style.display = "none";
+         document.getElementById("body").style.display = "block";
+         alert("You are logged in as " + newId);
+      }
+
+      function sendRoom(){
+         var newRoom = document.getElementById("n_Room").value;
+         var privateRoom = document.getElementById("p_Room").value;
+         var pw = document.getElementById("pw").value;
+         socketio.emit("addRoom", newRoom, privateRoom, pw);
+         $('#control').empty();
+         $('#control').append('<input type="text" id="badUser"/>');
+         $('#control').append('<button onclick="kick()">Kick</button>');
+         $('#control').append('<button onclick="ban()">Ban</button>');
+      }
+
+      function changeRoom(room){
+         socketio.emit('changeRoom', room);
+      }
+
+      function remove(){
+         var previous;
+         previous = document.getElementsByClassName("loggedUser")[0];
+       
+         while(previous.firstChild){
+            previous.removeChild(previous.firstChild);
+         }
+      }
+
+      function kick(){
+         var badUser = document.getElementById("badUser").value;
+         socketio.emit("kick", {badUser: badUser});
+      }
+
+      function ban(){
+         var badUser = document.getElementById("badUser").value;
+         socketio.emit("ban", {badUser: badUser});
+      }
+     
+
+
+      </script>
+      <style>
+
+         #user {
+            vertical-align: top;
+            margin-left: 40%;
+         }
+         #menu{
+            float:left;
+            vertical-align: top;
+            
+            width: 25%;
+            height: 1000px;
+            border-style: dotted;
+            text-align: center;
+            font-size: 13px;
+         }
+
+         #chatlog{
+            float: right;
+            overflow-y: auto;
+            background:lightgray;
+            height: 700px;
+            border-style: dotted;
+            width: 70%;
+            text-align: center;
+         }
+
+         #message{
+            float: right;
+            bottom: 0px;
+            width: 70%;
+            margin-bottom: 20px;
+            padding-top: 30px;
+         }
+
+         #message input{
+            width:800px;
+         }
+
+      </style>
+   </head>
+
+   <body>
+
+      <div id= "user" style = "display: block">
+         User: <input type="text" id="userId" required="required"/>
+         <button onclick="sendId()">login</button>
+      </div>
+      <p>
+      </p>
+      <div id = "body" style = "display: none">
+         <div id="wrapper">
+            <div id= "menu">
+               <h1> Users in the Room </h1>
+               <div class= "loggedUser">
+               </div>
+               <h1> Private Message </h1>
+               <form>
+                  Message:<input type= "text" id="private_input"/> &nbsp;
+                  To:<input type= "text" id="private_to"/>
+                  <button onclick="sendPrivate()">send</button>
+               </form>
+               <h1> Create Chat Rooms </h1>
+               <form>
+                  <p>
+                     Room Name:<input type= "text" id="n_Room"/>
+                  </p>
+                  <p>
+                     Private?: <input type= "text" id="p_Room" placeholder="y/n" required="required"/>
+                  </p>
+                  <p>
+                     If creating a private, enter Password: <input type= "text" id="pw" placeholder="password" required="required"/>
+                  </p>   
+                  <button onclick="sendRoom()">Add Room</button>
+               </form>
+               <h1> Join Chat Rooms </h1>
+               <div id= "chat_rooms"></div>
+               <div id="control"></div>
+            </div>
+            <div id="chatlog">
+               <h2> Chat Log </h2>
+            </div>
+            <div id="message">
+               <input type="text" id="message_input"/>
+               <button onclick="sendMessage()">send</button>
+            </div>
+         </div>
+        
+      </div>
+
+   </body>
+</html>
